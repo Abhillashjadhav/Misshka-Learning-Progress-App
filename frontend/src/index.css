@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+/* Custom animations */
+@keyframes confetti {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-200px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-confetti {
+  animation: confetti 1.5s ease-out forwards;
+}
+
+/* Child-friendly button */
+.btn-child {
+  min-width: 88px;
+  min-height: 88px;
+  border-radius: 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  transform: scale(1);
+  transition: all 0.2s;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+}
+
+.btn-child:hover {
+  transform: scale(1.05);
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+}
+
+.btn-child:active {
+  transform: scale(0.95);
+}
+
+/* Activity card */
+.activity-card {
+  background-color: white;
+  border-radius: 2rem;
+  padding: 1.5rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  transform: scale(1);
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.activity-card:hover {
+  transform: scale(1.05);
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
+
+/* Achievement badge */
+.achievement-badge {
+  width: 7rem;
+  height: 7rem;
+  border-radius: 9999px;
+  background: linear-gradient(to bottom right, #fbbf24, #d97706);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
+}
+
+/* Nova speech bubble */
+.nova-speech {
+  background-color: white;
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  position: relative;
+  box-shadow: 0 10px 40px rgba(168, 85, 247, 0.3);
+}
+
+.nova-speech::before {
+  content: '';
+  position: absolute;
+  bottom: -1rem;
+  left: 2rem;
+  width: 0;
+  height: 0;
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-top: 20px solid white;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(to right, #7c3aed, #db2777);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}

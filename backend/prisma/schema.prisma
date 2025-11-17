@@ -1,0 +1,159 @@
+// Prisma schema for Misshka's Learning Progress App
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  children     Child[]
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Child {
+  id                 String              @id @default(uuid())
+  userId             String              @map("user_id")
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  age                Int
+  interests          String              @default("[]")
+  avatarUrl          String?             @map("avatar_url")
+  sessions           ActivitySession[]
+  achievements       UserAchievement[]
+  stats              ProgressStat[]
+  screenTimeLogs     ScreenTimeLog[]
+  settings           Setting?
+  drawings           Drawing[]
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  @@map("children")
+}
+
+model Activity {
+  id                 String              @id
+  title              String
+  description        String?
+  category           String
+  subCategory        String?             @map("sub_category")
+  difficultyLevel    Int                 @map("difficulty_level")
+  recommendedAgeMin  Int?                @map("recommended_age_min")
+  recommendedAgeMax  Int?                @map("recommended_age_max")
+  content            String
+  sessions           ActivitySession[]
+  createdAt          DateTime            @default(now()) @map("created_at")
+
+  @@map("activities")
+}
+
+model ActivitySession {
+  id               String    @id @default(uuid())
+  childId          String    @map("child_id")
+  child            Child     @relation(fields: [childId], references: [id], onDelete: Cascade)
+  activityId       String    @map("activity_id")
+  activity         Activity  @relation(fields: [activityId], references: [id])
+  startedAt        DateTime  @default(now()) @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  durationSeconds  Int?      @map("duration_seconds")
+  questionsTotal   Int       @map("questions_total")
+  questionsCorrect Int       @default(0) @map("questions_correct")
+  accuracy         Float?
+  attempts         String    @default("[]")
+  isCompleted      Boolean   @default(false) @map("is_completed")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@map("activity_sessions")
+}
+
+model Achievement {
+  id            String             @id
+  title         String
+  description   String?
+  category      String
+  badgeIconUrl  String?            @map("badge_icon_url")
+  criteria      String
+  rewardPoints  Int                @default(0) @map("reward_points")
+  users         UserAchievement[]
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id             String      @id @default(uuid())
+  childId        String      @map("child_id")
+  child          Child       @relation(fields: [childId], references: [id], onDelete: Cascade)
+  achievementId  String      @map("achievement_id")
+  achievement    Achievement @relation(fields: [achievementId], references: [id])
+  unlockedAt     DateTime    @default(now()) @map("unlocked_at")
+  notifiedParent Boolean     @default(false) @map("notified_parent")
+
+  @@unique([childId, achievementId])
+  @@map("user_achievements")
+}
+
+model ProgressStat {
+  id                   String   @id @default(uuid())
+  childId              String   @map("child_id")
+  child                Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  date                 DateTime
+  category             String?
+  activitiesCompleted  Int      @default(0) @map("activities_completed")
+  totalTimeSeconds     Int      @default(0) @map("total_time_seconds")
+  accuracyAvg          Float?   @map("accuracy_avg")
+  starsEarned          Int      @default(0) @map("stars_earned")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@unique([childId, date, category])
+  @@map("progress_stats")
+}
+
+model ScreenTimeLog {
+  id              String    @id @default(uuid())
+  childId         String    @map("child_id")
+  child           Child     @relation(fields: [childId], references: [id], onDelete: Cascade)
+  date            DateTime
+  sessionStart    DateTime  @map("session_start")
+  sessionEnd      DateTime? @map("session_end")
+  durationSeconds Int?      @map("duration_seconds")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("screen_time_logs")
+}
+
+model Setting {
+  id                      String   @id @default(uuid())
+  childId                 String   @unique @map("child_id")
+  child                   Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  dailyTimeLimitSeconds   Int      @default(3600) @map("daily_time_limit_seconds")
+  volume                  Float    @default(0.70)
+  narrationEnabled        Boolean  @default(true) @map("narration_enabled")
+  notificationsEnabled    Boolean  @default(true) @map("notifications_enabled")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model Drawing {
+  id         String   @id @default(uuid())
+  childId    String   @map("child_id")
+  child      Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  title      String?
+  imageUrl   String   @map("image_url")
+  category   String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("drawings")
+}
