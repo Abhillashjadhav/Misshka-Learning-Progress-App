@@ -7,16 +7,19 @@ import { Dashboard } from './components/Dashboard'
 import { speakQuestion, speakExcited, speakEncouraging } from './utils/speech'
 import {
   ALL_QUESTIONS,
-  Subject,
-  Difficulty,
   SUBJECT_METADATA,
-  getQuestionsBySubject,
-  getQuestionsByDifficulty,
-  getRandomQuestion
+  getQuestionsByDifficulty
 } from './data/allQuestions'
-import { performanceTracker, QuestionAttempt } from './types/performance'
+import type { Subject, Difficulty } from './data/allQuestions'
+import { performanceTracker } from './types/performance'
+import type { QuestionAttempt } from './types/performance'
 
 type Page = 'home' | 'dashboard' | Subject;
+
+// Helper to check if page is a non-math subject
+const isNonMathSubject = (page: Page): page is Exclude<Subject, 'math'> => {
+  return page !== 'home' && page !== 'dashboard' && page !== 'math';
+};
 
 // Math question type
 interface MathQuestion {
@@ -331,7 +334,6 @@ function App() {
     return <Dashboard onClose={() => setCurrentPage('home')} />
   }
 
-  const currentSubject = currentPage as Subject
   const currentQ = currentQuestion ? ALL_QUESTIONS.find(q => q.id === currentQuestion) : null
 
   return (
@@ -484,7 +486,9 @@ function App() {
       )}
 
       {/* Other Subjects Page */}
-      {currentPage !== 'home' && currentPage !== 'dashboard' && currentPage !== 'math' && currentQ && (
+      {isNonMathSubject(currentPage) && currentQ && (() => {
+        const currentSubject = currentPage;
+        return (
         <div className="max-w-4xl mx-auto">
           <div className="mb-8 flex justify-between items-center">
             <Button variant="secondary" onClick={() => setCurrentPage('home')}>
@@ -568,7 +572,8 @@ function App() {
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   )
 }

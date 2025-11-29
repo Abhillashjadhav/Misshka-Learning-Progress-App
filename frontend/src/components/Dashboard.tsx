@@ -9,7 +9,6 @@ interface DashboardProps {
 
 export function Dashboard({ onClose }: DashboardProps) {
   const insights = performanceTracker.getInsights();
-  const categoryInsights = performanceTracker.getCategoryInsights();
 
   const subjects = Object.keys(SUBJECT_METADATA) as Array<keyof typeof SUBJECT_METADATA>;
   const performances = subjects.map(s => performanceTracker.getSubjectPerformance(s));

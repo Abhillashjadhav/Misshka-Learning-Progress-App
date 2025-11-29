@@ -1,6 +1,6 @@
 // Performance tracking types for analytics and adaptive learning
 
-import { Subject, Category, Difficulty } from '../data/allQuestions';
+import type { Subject, Category, Difficulty } from '../data/allQuestions';
 
 export interface QuestionAttempt {
   questionId: number;
@@ -218,7 +218,7 @@ export class PerformanceTracker {
   // AI-driven question selection
   selectNextQuestion(
     subject: Subject,
-    currentDifficulty: Difficulty,
+    _currentDifficulty: Difficulty,
     availableQuestions: number[]
   ): { questionId: number; reason: string } | null {
     const performance = this.getSubjectPerformance(subject);
