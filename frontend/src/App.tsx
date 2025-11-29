@@ -3,34 +3,65 @@ import { Nova } from './components/character/Nova'
 import { NovaDialog } from './components/character/NovaDialog'
 import { Button } from './components/common/Button'
 import { Card } from './components/common/Card'
+import { Dashboard } from './components/Dashboard'
 import { speakQuestion, speakExcited, speakEncouraging } from './utils/speech'
-import { SCIENCE_QUESTIONS, getQuestionsByDifficulty } from './data/scienceQuestions'
+import {
+  ALL_QUESTIONS,
+  Subject,
+  Difficulty,
+  SUBJECT_METADATA,
+  getQuestionsBySubject,
+  getQuestionsByDifficulty,
+  getRandomQuestion
+} from './data/allQuestions'
+import { performanceTracker, QuestionAttempt } from './types/performance'
 
-type Difficulty = 'easy' | 'medium' | 'hard';
+type Page = 'home' | 'dashboard' | Subject;
+
+// Math question type
+interface MathQuestion {
+  num1: number;
+  num2: number;
+  operation: '+' | '-';
+  answer: number;
+}
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'math' | 'science'>('home')
+  const [currentPage, setCurrentPage] = useState<Page>('home')
   const [score, setScore] = useState(0)
   const [audioEnabled, setAudioEnabled] = useState(false)
 
-  // Difficulty tracking
-  const [mathDifficulty, setMathDifficulty] = useState<Difficulty>('easy')
-  const [scienceDifficulty, setScienceDifficulty] = useState<Difficulty>('easy')
-  const [mathCorrectStreak, setMathCorrectStreak] = useState(0)
-  const [scienceCorrectStreak, setScienceCorrectStreak] = useState(0)
+  // Difficulty tracking per subject
+  const [difficulties, setDifficulties] = useState<Record<Subject, Difficulty>>({
+    math: 'easy',
+    science: 'easy',
+    english: 'easy',
+    'general-knowledge': 'easy',
+    art: 'easy',
+    logic: 'easy',
+  })
+
+  // Streak tracking per subject
+  const [streaks, setStreaks] = useState<Record<Subject, number>>({
+    math: 0,
+    science: 0,
+    english: 0,
+    'general-knowledge': 0,
+    art: 0,
+    logic: 0,
+  })
 
   // Math activity state
-  const [mathQuestion, setMathQuestion] = useState({ num1: 2, num2: 3, answer: 5, operation: '+' as '+' | '-' })
+  const [mathQuestion, setMathQuestion] = useState<MathQuestion>({ num1: 2, num2: 3, answer: 5, operation: '+' })
   const [selectedMathAnswer, setSelectedMathAnswer] = useState<number | null>(null)
   const [showMathFeedback, setShowMathFeedback] = useState(false)
   const [mathAttempts, setMathAttempts] = useState(0)
 
-  // Science activity state
-  const [askedQuestions, setAskedQuestions] = useState<number[]>([])
-  const [currentScienceQ, setCurrentScienceQ] = useState(0)
-  const [selectedScienceAnswer, setSelectedScienceAnswer] = useState<number | null>(null)
-  const [showScienceFeedback, setShowScienceFeedback] = useState(false)
-  const [scienceAttempts, setScienceAttempts] = useState(0)
+  // Other subjects state
+  const [currentQuestion, setCurrentQuestion] = useState<number | null>(null)
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [attempts, setAttempts] = useState(0)
 
   // Enable audio on first interaction
   const enableAudio = () => {
@@ -42,15 +73,16 @@ function App() {
 
   // Generate math question based on difficulty
   const generateNewMathQuestion = () => {
-    let num1, num2, operation: '+' | '-', answer;
+    const difficulty = difficulties.math;
+    let num1: number, num2: number, operation: '+' | '-', answer: number;
 
-    if (mathDifficulty === 'easy') {
+    if (difficulty === 'easy') {
       // Easy: 1-5 addition
       num1 = Math.floor(Math.random() * 5) + 1
       num2 = Math.floor(Math.random() * 5) + 1
       operation = '+'
       answer = num1 + num2
-    } else if (mathDifficulty === 'medium') {
+    } else if (difficulty === 'medium') {
       // Medium: 5-10 addition and simple subtraction
       if (Math.random() > 0.5) {
         num1 = Math.floor(Math.random() * 6) + 5 // 5-10
@@ -59,19 +91,19 @@ function App() {
         answer = num1 + num2
       } else {
         num1 = Math.floor(Math.random() * 8) + 3 // 3-10
-        num2 = Math.floor(Math.random() * num1) + 1 // 1 to num1
+        num2 = Math.floor(Math.random() * num1) + 1
         operation = '-'
         answer = num1 - num2
       }
     } else {
-      // Hard: larger numbers and subtraction
+      // Hard: larger numbers
       if (Math.random() > 0.4) {
         num1 = Math.floor(Math.random() * 11) + 10 // 10-20
         num2 = Math.floor(Math.random() * 10) + 1
         operation = '+'
         answer = num1 + num2
       } else {
-        num1 = Math.floor(Math.random() * 11) + 10 // 10-20
+        num1 = Math.floor(Math.random() * 11) + 10
         num2 = Math.floor(Math.random() * 10) + 1
         operation = '-'
         answer = num1 - num2
@@ -91,31 +123,62 @@ function App() {
     }
   }
 
-  // Get next science question based on difficulty and avoid repetition
-  const getNextScienceQuestion = () => {
-    const difficultyQuestions = getQuestionsByDifficulty(scienceDifficulty)
-    const unasked = difficultyQuestions.filter(q => !askedQuestions.includes(q.id))
-
-    if (unasked.length === 0) {
-      // All questions asked, reset but increase difficulty if possible
-      setAskedQuestions([])
-      if (scienceDifficulty === 'easy' && scienceCorrectStreak >= 3) {
-        setScienceDifficulty('medium')
-      } else if (scienceDifficulty === 'medium' && scienceCorrectStreak >= 5) {
-        setScienceDifficulty('hard')
-      }
-      return difficultyQuestions[0]
+  // Load next question for non-math subjects using AI-driven selection
+  const loadNextQuestion = (subject: Subject) => {
+    if (subject === 'math') {
+      generateNewMathQuestion()
+      return
     }
 
-    return unasked[Math.floor(Math.random() * unasked.length)]
-  }
+    const difficulty = difficulties[subject]
+    const subjectQuestions = getQuestionsByDifficulty(subject, difficulty)
+    const availableIds = subjectQuestions.map(q => q.id)
 
-  const loadNextScienceQuestion = () => {
-    const nextQ = getNextScienceQuestion()
-    setCurrentScienceQ(SCIENCE_QUESTIONS.findIndex(q => q.id === nextQ.id))
-    setSelectedScienceAnswer(null)
-    setShowScienceFeedback(false)
-    setScienceAttempts(0)
+    // Use AI-driven selection
+    const selection = performanceTracker.selectNextQuestion(subject, difficulty, availableIds)
+
+    if (selection) {
+      const question = ALL_QUESTIONS.find(q => q.id === selection.questionId)
+      if (question) {
+        setCurrentQuestion(question.id)
+        setSelectedAnswer(null)
+        setShowFeedback(false)
+        setAttempts(0)
+
+        if (audioEnabled) {
+          setTimeout(() => {
+            speakQuestion(question.question)
+          }, 500)
+        }
+        return
+      }
+    }
+
+    // Fallback: if all questions are asked, increase difficulty
+    const nextDiff = difficulty === 'easy' ? 'medium' : difficulty === 'medium' ? 'hard' : 'easy'
+    setDifficulties(prev => ({ ...prev, [subject]: nextDiff }))
+    performanceTracker.resetSession()
+
+    // Try again with new difficulty
+    const nextQuestions = getQuestionsByDifficulty(subject, nextDiff)
+    if (nextQuestions.length > 0) {
+      const randomQ = nextQuestions[Math.floor(Math.random() * nextQuestions.length)]
+      setCurrentQuestion(randomQ.id)
+      setSelectedAnswer(null)
+      setShowFeedback(false)
+      setAttempts(0)
+
+      if (audioEnabled) {
+        setTimeout(() => {
+          speakQuestion(randomQ.question)
+          if (nextDiff === 'medium') {
+            speakExcited("Wow Misshka! You've answered all easy questions! Moving to medium level!")
+          } else if (nextDiff === 'hard') {
+            speakExcited("Amazing Misshka! You're ready for hard questions!")
+          }
+        }, 500)
+      }
+    }
   }
 
   const checkMathAnswer = (answer: number) => {
@@ -123,16 +186,31 @@ function App() {
     setShowMathFeedback(true)
     setMathAttempts(mathAttempts + 1)
 
-    if (answer === mathQuestion.answer) {
-      setScore(score + 1)
-      setMathCorrectStreak(mathCorrectStreak + 1)
+    const correct = answer === mathQuestion.answer
 
-      // Adapt difficulty based on performance
-      if (mathCorrectStreak >= 3 && mathDifficulty === 'easy') {
-        setMathDifficulty('medium')
+    // Track performance
+    const attempt: QuestionAttempt = {
+      questionId: -1, // Math questions don't have IDs
+      subject: 'math',
+      category: 'patterns', // Default category for math
+      difficulty: difficulties.math,
+      correct,
+      timestamp: Date.now(),
+      attempts: mathAttempts + 1,
+    }
+    performanceTracker.addAttempt(attempt)
+
+    if (correct) {
+      setScore(score + 1)
+      const newStreak = streaks.math + 1
+      setStreaks(prev => ({ ...prev, math: newStreak }))
+
+      // Adapt difficulty
+      if (newStreak >= 3 && difficulties.math === 'easy') {
+        setDifficulties(prev => ({ ...prev, math: 'medium' }))
         if (audioEnabled) speakExcited("You're getting better, Misshka! Let's try harder questions!")
-      } else if (mathCorrectStreak >= 5 && mathDifficulty === 'medium') {
-        setMathDifficulty('hard')
+      } else if (newStreak >= 5 && difficulties.math === 'medium') {
+        setDifficulties(prev => ({ ...prev, math: 'hard' }))
         if (audioEnabled) speakExcited("Wow Misshka! You're amazing! Here come the challenge questions!")
       }
 
@@ -144,22 +222,11 @@ function App() {
       ]
       const randomMessage = messages[Math.floor(Math.random() * messages.length)]
 
-      if (audioEnabled) {
-        speakExcited(randomMessage)
-      }
-
-      // Milestone achievements
-      if ((score + 1) % 5 === 0) {
-        setTimeout(() => {
-          if (audioEnabled) {
-            speakExcited(`Amazing, Misshka! You've earned ${score + 1} stars! You're doing so well!`)
-          }
-        }, 2000)
-      }
+      if (audioEnabled) speakExcited(randomMessage)
 
       setTimeout(() => generateNewMathQuestion(), 3000)
     } else {
-      setMathCorrectStreak(0)
+      setStreaks(prev => ({ ...prev, math: 0 }))
       if (audioEnabled) {
         if (mathAttempts === 0) {
           speakEncouraging("Not quite, Misshka! Try again, you can do it!")
@@ -170,25 +237,40 @@ function App() {
     }
   }
 
-  const checkScienceAnswer = (answerIndex: number) => {
-    setSelectedScienceAnswer(answerIndex)
-    setShowScienceFeedback(true)
-    setScienceAttempts(scienceAttempts + 1)
+  const checkAnswer = (answerIndex: number, subject: Subject) => {
+    setSelectedAnswer(answerIndex)
+    setShowFeedback(true)
+    setAttempts(attempts + 1)
 
-    const question = SCIENCE_QUESTIONS[currentScienceQ]
+    const question = ALL_QUESTIONS.find(q => q.id === currentQuestion)
+    if (!question) return
 
-    if (answerIndex === question.correct) {
+    const correct = answerIndex === question.correct
+
+    // Track performance
+    const attempt: QuestionAttempt = {
+      questionId: question.id,
+      subject: question.subject,
+      category: question.category,
+      difficulty: question.difficulty,
+      correct,
+      timestamp: Date.now(),
+      attempts: attempts + 1,
+    }
+    performanceTracker.addAttempt(attempt)
+
+    if (correct) {
       setScore(score + 1)
-      setScienceCorrectStreak(scienceCorrectStreak + 1)
-      setAskedQuestions([...askedQuestions, question.id])
+      const newStreak = streaks[subject] + 1
+      setStreaks(prev => ({ ...prev, [subject]: newStreak }))
 
       // Adapt difficulty
-      if (scienceCorrectStreak >= 3 && scienceDifficulty === 'easy') {
-        setScienceDifficulty('medium')
-        if (audioEnabled) speakExcited("You're so smart, Misshka! Let's try harder science questions!")
-      } else if (scienceCorrectStreak >= 5 && scienceDifficulty === 'medium') {
-        setScienceDifficulty('hard')
-        if (audioEnabled) speakExcited("Incredible, Misshka! You're a science genius! Challenge mode!")
+      if (newStreak >= 3 && difficulties[subject] === 'easy') {
+        setDifficulties(prev => ({ ...prev, [subject]: 'medium' }))
+        if (audioEnabled) speakExcited(`You're so smart, Misshka! Let's try harder ${SUBJECT_METADATA[subject].name} questions!`)
+      } else if (newStreak >= 5 && difficulties[subject] === 'medium') {
+        setDifficulties(prev => ({ ...prev, [subject]: 'hard' }))
+        if (audioEnabled) speakExcited(`Incredible, Misshka! You're a ${SUBJECT_METADATA[subject].name} genius!`)
       }
 
       const messages = [
@@ -198,26 +280,13 @@ function App() {
       ]
       const randomMessage = messages[Math.floor(Math.random() * messages.length)]
 
-      if (audioEnabled) {
-        speakExcited(randomMessage)
-      }
+      if (audioEnabled) speakExcited(randomMessage)
 
-      // Milestone achievements
-      if ((score + 1) % 5 === 0) {
-        setTimeout(() => {
-          if (audioEnabled) {
-            speakExcited(`Wonderful, Misshka! You've earned ${score + 1} stars! Keep going!`)
-          }
-        }, 3000)
-      }
-
-      setTimeout(() => {
-        loadNextScienceQuestion()
-      }, 5000)
+      setTimeout(() => loadNextQuestion(subject), 5000)
     } else {
-      setScienceCorrectStreak(0)
+      setStreaks(prev => ({ ...prev, [subject]: 0 }))
       if (audioEnabled) {
-        if (scienceAttempts === 0) {
+        if (attempts === 0) {
           speakEncouraging("Hmm, not quite! Try another answer, Misshka!")
         } else {
           speakEncouraging("That's okay, Misshka! Learning is fun!")
@@ -226,43 +295,44 @@ function App() {
     }
   }
 
-  // Skip to next question
-  const skipQuestion = (type: 'math' | 'science') => {
-    if (type === 'math') {
+  const skipQuestion = (subject: Subject) => {
+    if (subject === 'math') {
       generateNewMathQuestion()
     } else {
-      const question = SCIENCE_QUESTIONS[currentScienceQ]
-      setAskedQuestions([...askedQuestions, question.id])
-      loadNextScienceQuestion()
+      loadNextQuestion(subject)
     }
   }
 
-  // Try again (reset attempts)
-  const tryAgain = (type: 'math' | 'science') => {
-    if (type === 'math') {
+  const tryAgain = (subject: Subject) => {
+    if (subject === 'math') {
       setSelectedMathAnswer(null)
       setShowMathFeedback(false)
     } else {
-      setSelectedScienceAnswer(null)
-      setShowScienceFeedback(false)
+      setSelectedAnswer(null)
+      setShowFeedback(false)
     }
   }
 
-  // Initialize first questions
+  // Initialize
   useEffect(() => {
     generateNewMathQuestion()
-    loadNextScienceQuestion()
+    loadNextQuestion('science')
   }, [])
 
-  // Ask question when entering science page
+  // Load question when page changes
   useEffect(() => {
-    if (currentPage === 'science' && audioEnabled && SCIENCE_QUESTIONS[currentScienceQ]) {
-      setTimeout(() => {
-        const question = SCIENCE_QUESTIONS[currentScienceQ]
-        speakQuestion(question.question)
-      }, 500)
+    if (currentPage !== 'home' && currentPage !== 'dashboard' && currentPage !== 'math') {
+      loadNextQuestion(currentPage as Subject)
     }
-  }, [currentPage, currentScienceQ, audioEnabled])
+  }, [currentPage])
+
+  // Render dashboard
+  if (currentPage === 'dashboard') {
+    return <Dashboard onClose={() => setCurrentPage('home')} />
+  }
+
+  const currentSubject = currentPage as Subject
+  const currentQ = currentQuestion ? ALL_QUESTIONS.find(q => q.id === currentQuestion) : null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-8">
@@ -286,30 +356,44 @@ function App() {
           </div>
 
           {/* Activity Cards */}
-          <div className="grid md:grid-cols-2 gap-8">
-            <Card variant="activity" onClick={() => { setCurrentPage('math'); enableAudio(); }}>
-              <div className="text-center p-8">
-                <div className="text-6xl mb-4">🔢</div>
-                <h2 className="text-3xl font-bold text-purple-600 mb-2">Math Games</h2>
-                <p className="text-xl text-gray-600">Addition and subtraction!</p>
-                <p className="text-sm text-gray-500 mt-2">Level: {mathDifficulty.toUpperCase()}</p>
-              </div>
-            </Card>
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            {(Object.keys(SUBJECT_METADATA) as Subject[]).map(subject => (
+              <Card
+                key={subject}
+                variant="activity"
+                onClick={() => {
+                  setCurrentPage(subject)
+                  enableAudio()
+                }}
+              >
+                <div className="text-center p-6">
+                  <div className="text-5xl mb-3">{SUBJECT_METADATA[subject].icon}</div>
+                  <h2 className="text-2xl font-bold text-purple-600 mb-2">
+                    {SUBJECT_METADATA[subject].name}
+                  </h2>
+                  <p className="text-lg text-gray-600 mb-2">{SUBJECT_METADATA[subject].description}</p>
+                  <p className="text-sm text-gray-500">Level: {difficulties[subject].toUpperCase()}</p>
+                </div>
+              </Card>
+            ))}
+          </div>
 
-            <Card variant="activity" onClick={() => { setCurrentPage('science'); enableAudio(); }}>
-              <div className="text-center p-8">
-                <div className="text-6xl mb-4">🚀</div>
-                <h2 className="text-3xl font-bold text-purple-600 mb-2">Science Fun</h2>
-                <p className="text-xl text-gray-600">Explore nature and space!</p>
-                <p className="text-sm text-gray-500 mt-2">Level: {scienceDifficulty.toUpperCase()}</p>
-              </div>
-            </Card>
+          {/* Dashboard Button */}
+          <div className="text-center mb-8">
+            <Button variant="gold" size="large" onClick={() => setCurrentPage('dashboard')}>
+              📊 View My Progress Dashboard
+            </Button>
           </div>
 
           {/* Score Display */}
           <div className="mt-12 text-center">
             <div className="inline-block bg-white rounded-3xl shadow-lg px-8 py-4">
-              <p className="text-xl text-gray-700">⭐ Stars Earned: <span className="text-3xl font-bold text-gold-400">{score}</span></p>
+              <p className="text-xl text-gray-700">
+                ⭐ Stars Earned: <span className="text-3xl font-bold text-gold-400">{score}</span>
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                Questions Answered: {performanceTracker.getTotalUniqueQuestionsAsked()}
+              </p>
             </div>
           </div>
         </div>
@@ -323,13 +407,13 @@ function App() {
               ← Back to Home
             </Button>
             <div className="text-xl font-bold text-purple-600">
-              Level: {mathDifficulty.toUpperCase()} | Streak: {mathCorrectStreak}
+              Level: {difficulties.math.toUpperCase()} | Streak: {streaks.math}
             </div>
           </div>
 
           <div className="text-center mb-8">
             <h2 className="text-5xl font-bold gradient-text mb-4">
-              Math Challenge! {mathQuestion.operation === '+' ? '➕' : '➖'}
+              {SUBJECT_METADATA.math.icon} Math Challenge! {mathQuestion.operation === '+' ? '➕' : '➖'}
             </h2>
           </div>
 
@@ -337,7 +421,6 @@ function App() {
             <Nova emotion={showMathFeedback && selectedMathAnswer === mathQuestion.answer ? 'celebrating' : 'happy'} size="large" />
           </div>
 
-          {/* Math Question */}
           <div className="bg-white rounded-4xl shadow-2xl p-12 mb-8">
             <div className="text-center mb-8">
               <p className="text-6xl font-bold text-gray-800 mb-8">
@@ -345,7 +428,6 @@ function App() {
               </p>
             </div>
 
-            {/* Answer Options */}
             <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto mb-6">
               {[
                 mathQuestion.answer - 2,
@@ -367,7 +449,6 @@ function App() {
               ))}
             </div>
 
-            {/* Feedback and Navigation */}
             {showMathFeedback && (
               <div className="mt-8 text-center">
                 {selectedMathAnswer === mathQuestion.answer ? (
@@ -389,6 +470,11 @@ function App() {
                         ⏭️ Next Question
                       </Button>
                     </div>
+                    {mathAttempts > 1 && (
+                      <div className="mt-4 text-2xl text-gray-600">
+                        The answer is: <span className="font-bold text-green-600">{mathQuestion.answer}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -397,45 +483,45 @@ function App() {
         </div>
       )}
 
-      {/* Science Activity Page */}
-      {currentPage === 'science' && SCIENCE_QUESTIONS[currentScienceQ] && (
+      {/* Other Subjects Page */}
+      {currentPage !== 'home' && currentPage !== 'dashboard' && currentPage !== 'math' && currentQ && (
         <div className="max-w-4xl mx-auto">
           <div className="mb-8 flex justify-between items-center">
             <Button variant="secondary" onClick={() => setCurrentPage('home')}>
               ← Back to Home
             </Button>
             <div className="text-xl font-bold text-purple-600">
-              Level: {scienceDifficulty.toUpperCase()} | Streak: {scienceCorrectStreak}
+              Level: {difficulties[currentSubject].toUpperCase()} | Streak: {streaks[currentSubject]}
             </div>
           </div>
 
           <div className="text-center mb-8">
             <h2 className="text-5xl font-bold gradient-text mb-4">
-              Science Explorer! 🚀🔬
+              {SUBJECT_METADATA[currentSubject].icon} {SUBJECT_METADATA[currentSubject].name}
             </h2>
           </div>
 
           <div className="mb-8 flex justify-center">
-            <Nova emotion={showScienceFeedback && selectedScienceAnswer === SCIENCE_QUESTIONS[currentScienceQ].correct ? 'celebrating' : 'thinking'} size="large" />
+            <Nova emotion={showFeedback && selectedAnswer === currentQ.correct ? 'celebrating' : 'thinking'} size="large" />
           </div>
 
-          {/* Science Question */}
           <div className="bg-white rounded-4xl shadow-2xl p-12 mb-8">
             <div className="text-center mb-8">
-              <div className="text-6xl mb-6">{SCIENCE_QUESTIONS[currentScienceQ].emoji}</div>
-              <p className="text-4xl text-gray-700 mb-4">{SCIENCE_QUESTIONS[currentScienceQ].question}</p>
-              <p className="text-sm text-purple-600">Category: {SCIENCE_QUESTIONS[currentScienceQ].category.toUpperCase()}</p>
+              {/* NO EMOJI HERE - removed to prevent hints */}
+              <p className="text-4xl text-gray-700 mb-4">{currentQ.question}</p>
+              <p className="text-sm text-purple-600">
+                Category: {currentQ.category.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+              </p>
             </div>
 
-            {/* Answer Options */}
             <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto mb-6">
-              {SCIENCE_QUESTIONS[currentScienceQ].options.map((option, index) => (
+              {currentQ.options.map((option, index) => (
                 <Button
                   key={index}
-                  variant={selectedScienceAnswer === index ? (index === SCIENCE_QUESTIONS[currentScienceQ].correct ? 'gold' : 'primary') : 'purple'}
+                  variant={selectedAnswer === index ? (index === currentQ.correct ? 'gold' : 'primary') : 'purple'}
                   size="child"
-                  onClick={() => checkScienceAnswer(index)}
-                  disabled={showScienceFeedback}
+                  onClick={() => checkAnswer(index, currentSubject)}
+                  disabled={showFeedback}
                   className="text-xl py-6"
                 >
                   {option}
@@ -443,36 +529,37 @@ function App() {
               ))}
             </div>
 
-            {/* Feedback and Navigation */}
-            {showScienceFeedback && (
+            {showFeedback && (
               <div className="mt-8 text-center">
-                {selectedScienceAnswer === SCIENCE_QUESTIONS[currentScienceQ].correct ? (
+                {selectedAnswer === currentQ.correct ? (
                   <div>
                     <div className="text-4xl font-bold text-green-600 animate-bounce mb-4">
                       🎉 Perfect, Misshka! 🎉
                     </div>
                     <div className="text-2xl text-gray-700">
-                      {SCIENCE_QUESTIONS[currentScienceQ].explanation}
+                      {currentQ.explanation}
                     </div>
                   </div>
                 ) : (
                   <div>
                     <div className="text-3xl font-bold text-orange-500 mb-6">
-                      {scienceAttempts === 1 ? "Hmm, try another answer!" : "That's okay! Let's learn more!"}
+                      {attempts === 1 ? "Hmm, try another answer!" : "That's okay! Let's learn more!"}
                     </div>
                     <div className="flex gap-4 justify-center">
-                      {scienceAttempts === 1 && (
-                        <Button variant="purple" onClick={() => tryAgain('science')}>
+                      {attempts === 1 && (
+                        <Button variant="purple" onClick={() => tryAgain(currentSubject)}>
                           🔄 Try Again
                         </Button>
                       )}
-                      <Button variant="secondary" onClick={() => skipQuestion('science')}>
+                      <Button variant="secondary" onClick={() => skipQuestion(currentSubject)}>
                         ⏭️ Next Question
                       </Button>
                     </div>
-                    {scienceAttempts > 1 && (
+                    {attempts > 1 && (
                       <div className="mt-4 text-lg text-gray-600">
-                        Correct answer: {SCIENCE_QUESTIONS[currentScienceQ].options[SCIENCE_QUESTIONS[currentScienceQ].correct]}
+                        Correct answer: <span className="font-bold">{currentQ.options[currentQ.correct]}</span>
+                        <br />
+                        <span className="text-sm">{currentQ.explanation}</span>
                       </div>
                     )}
                   </div>
